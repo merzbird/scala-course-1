@@ -1,10 +1,5 @@
 package patmat
 
-import common._
-import patmat.Huffman.decode
-
-import scala.collection.mutable
-
 /**
   * Assignment 4: Huffman coding
   *
@@ -82,9 +77,9 @@ object Huffman {
     * }
     */
   def times(chars: List[Char]): List[(Char, Int)] = {
-    val m = mutable.HashMap[Char, Int]().withDefault(_ => 0)
-    chars.foreach((c: Char) => m(c) = m(c) + 1)
-    m.toList
+    def incr(acc: Map[Char, Int], c: Char): Map[Char, Int] = acc + ((c, acc.getOrElse(c, 0) + 1))
+
+    (chars foldLeft Map[Char, Int]()) (incr).toList
   }
 
   /**
@@ -117,9 +112,8 @@ object Huffman {
     */
   def combine(trees: List[CodeTree]): List[CodeTree] =
     trees match {
-      case _ :: Nil => trees
-      case x1 :: x2 :: xs => makeCodeTree(x1, x2) :: combine(xs)
-      case Nil => Nil
+      case x1 :: x2 :: xs => (makeCodeTree(x1, x2) :: xs).sortWith((t1, t2) => weight(t1) < weight(t2))
+      case _ => trees
     }
 
   /**
@@ -164,16 +158,10 @@ object Huffman {
     * the resulting list of characters.
     */
   def decode(tree: CodeTree, bits: List[Bit]): List[Char] = {
-    def decodeInternal(t: CodeTree, bs: List[Bit]): List[Char] = {
-      t match {
-        case Leaf(c, _) => c :: decodeInternal(tree, bs)
-        case Fork(l, r, _, _) => {
-          if (bs.nonEmpty)
-            decodeInternal(if (bs.head == 0) l else r, bs.tail)
-          else
-            List.empty
-        }
-      }
+    def decodeInternal(remaining: CodeTree, bits: List[Bit]): List[Char] = remaining match {
+      case Leaf(c, _) if bits.isEmpty => List(c)
+      case Leaf(c, _) => c :: decodeInternal(tree, bits)
+      case Fork(l, r, _, _) => decodeInternal(if (bits.head == 0) l else r, bits.tail)
     }
 
     decodeInternal(tree, bits)
@@ -205,11 +193,12 @@ object Huffman {
     * into a sequence of bits.
     */
   def encode(tree: CodeTree)(text: List[Char]): List[Bit] = {
-    def lookup(tree:  CodeTree)(c: Char): List[Bit] = tree match {
+    def lookup(tree: CodeTree)(c: Char): List[Bit] = tree match {
       case Leaf(_, _) => List.empty
       case Fork(l, _, _, _) if chars(l).contains(c) => 0 :: lookup(l)(c)
       case Fork(_, r, _, _) => 1 :: lookup(r)(c)
     }
+
     text flatMap lookup(tree)
   }
 
@@ -245,6 +234,7 @@ object Huffman {
   def mergeCodeTables(a: CodeTable, b: CodeTable): CodeTable = {
     def prepend(b: Bit)(code: (Char, List[Bit])): (Char, List[Bit]) =
       (code._1, b :: code._2)
+
     a.map(prepend(0)) ::: b.map(prepend(1))
   }
 
